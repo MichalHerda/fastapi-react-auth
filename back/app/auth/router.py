@@ -1,66 +1,65 @@
-from fastapi import APIRouter, HTTPException
-from app.auth.schemas import SignupRequest, LoginRequest
-from app.auth.security import (
-    hash_password,
-    verify_password,
-    create_access_token
-)
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
-from fastapi import Depends
-from app.auth.security import get_current_user
+from app.auth import crud, schemas, security
+from app.core.database import get_db
+
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-router = APIRouter(
-    prefix="/auth",
-    tags=["auth"]
-)
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+def signup(
+    data: schemas.SignupRequest,
+    db: Session = Depends(get_db),
+):
+    # Optional: check uniqueness
+    if data.email:
+        if crud.get_user_by_email(db, data.email):
+            raise HTTPException(
+                status_code=400,
+                detail="Email already in use",
+            )
 
-fake_users_db = {}
+    if data.username:
+        if crud.get_user_by_username(db, data.username):
+            raise HTTPException(
+                status_code=400,
+                detail="Username already in use",
+            )
 
+    password_hash = security.hash_password(data.password)
 
-@router.post("/signup")
-def signup(data: SignupRequest):
-    if data.username in fake_users_db:
-        return {"error": "User already exists"}
-
-    password_hash = hash_password(data.password)
-
-    fake_users_db[data.username] = {
-        "username": data.username,
-        "password_hash": password_hash,
-    }
-
-    return {
-        "message": f"user {data.username} created"
-    }
-
-
-@router.post("/login")
-def login(data: LoginRequest):
-    user = fake_users_db.get(data.username)
-
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    if not verify_password(data.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    access_token = create_access_token(
-        data={"sub": user["username"]}
+    crud.create_user(
+        db=db,
+        email=data.email,
+        username=data.username,
+        password_hash=password_hash,
     )
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+    return {"message": "User created"}
 
 
-# for test only - delete later
-@router.get("/_debug/users")
-def list_users():
-    return fake_users_db
+@router.post("/login", response_model=schemas.AuthResponse)
+def login(
+    data: schemas.LoginRequest,
+    db: Session = Depends(get_db),
+):
+    user = crud.get_user_by_identifier(db, data.identifier)
 
+    if not user or not security.verify_password(
+        data.password,
+        user.password_hash,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
 
-@router.get("/me")
-def me(username: str = Depends(get_current_user)):
-    return {"username": username}
+    access_token = security.create_access_token(
+        data={"sub": str(user.id)},
+    )
+
+    return schemas.AuthResponse(
+        access_token=access_token,
+        token_type="bearer",
+    )
