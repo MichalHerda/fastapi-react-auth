@@ -114,7 +114,9 @@ Tables are created via Alembic migrations
 PostgreSQL example:
 
 ```
-createdb todo_db
+sudo -i -u postgres
+psql
+CREATE DATABASE auth_db;
 ```
 
 ## Frontend Setup

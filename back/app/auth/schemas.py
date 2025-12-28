@@ -14,8 +14,15 @@ class SignupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    identifier: str  # email OR username
+    username: str | None = None
+    email: str | None = None
     password: str
+
+    @model_validator(mode="after")
+    def validate_identifiers(self):
+        if not self.username and not self.email:
+            raise ValueError("Either email or username is required")
+        return self
 
 
 class AuthResponse(BaseModel):

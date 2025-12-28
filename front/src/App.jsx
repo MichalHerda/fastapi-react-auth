@@ -58,7 +58,7 @@ function App() {
               <AuthForm onAuthSuccess={handleAuthSuccess} />
             </div>
           ) : (
-            <div className="text-gray-400">TODO LIST COMING NEXT 🚀</div>
+            <div className="text-gray-400">YOUR APP CONTENT 🚀</div>
           )}
         </div>
       </main>

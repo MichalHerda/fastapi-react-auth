@@ -12,20 +12,18 @@ def signup(
     data: schemas.SignupRequest,
     db: Session = Depends(get_db),
 ):
-    # Optional: check uniqueness
-    if data.email:
-        if crud.get_user_by_email(db, data.email):
-            raise HTTPException(
-                status_code=400,
-                detail="Email already in use",
-            )
+    # Check uniqueness
+    if data.email and crud.get_user_by_email(db, data.email):
+        raise HTTPException(
+            status_code=400,
+            detail="Email already in use",
+        )
 
-    if data.username:
-        if crud.get_user_by_username(db, data.username):
-            raise HTTPException(
-                status_code=400,
-                detail="Username already in use",
-            )
+    if data.username and crud.get_user_by_username(db, data.username):
+        raise HTTPException(
+            status_code=400,
+            detail="Username already in use",
+        )
 
     password_hash = security.hash_password(data.password)
 
@@ -39,27 +37,17 @@ def signup(
     return {"message": "User created"}
 
 
-@router.post("/login", response_model=schemas.AuthResponse)
-def login(
-    data: schemas.LoginRequest,
-    db: Session = Depends(get_db),
-):
-    user = crud.get_user_by_identifier(db, data.identifier)
+@router.post("/login")
+def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
+    # identifier może być email lub username
+    user = None
+    if data.email:
+        user = crud.get_user_by_email(db, data.email)
+    if not user and data.username:
+        user = crud.get_user_by_username(db, data.username)
 
-    if not user or not security.verify_password(
-        data.password,
-        user.password_hash,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
+    if not user or not security.verify_password(data.password, user.password_hash):             # noqa
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    access_token = security.create_access_token(
-        data={"sub": str(user.id)},
-    )
-
-    return schemas.AuthResponse(
-        access_token=access_token,
-        token_type="bearer",
-    )
+    token = security.create_access_token({"sub": user.email or user.username})
+    return {"access_token": token, "token_type": "bearer"}
